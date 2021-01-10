@@ -1,0 +1,14 @@
+[package]
+name = "lifx-client"
+version = "0.1.0"
+authors = ["Ben Navetta <ben.navetta@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bytes = "1.0"
+lifx-proto = { path = "../lifx-proto" }
+tokio = { version = "1.0", features = ["net", "sync"] }
+thiserror = "1.0"
+tracing = "0.1"

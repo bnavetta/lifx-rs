@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "lifx-proto",
+    "lifx-client",
+    "demo"
+]
