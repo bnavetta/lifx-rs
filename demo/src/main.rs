@@ -1,11 +1,4 @@
-use std::net::SocketAddr;
-
-use bytes::{Buf, BytesMut};
-use futures::stream::FuturesUnordered;
-use tokio::net::UdpSocket;
-use tokio::sync::broadcast;
-
-use lifx_client::{Client, Connection, DeviceAddress};
+use lifx_client::Client;
 use lifx_proto::Message;
 
 #[tokio::main]

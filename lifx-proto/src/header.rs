@@ -1,6 +1,5 @@
 //! On-the-wire representations of the LIFX LAN protocol
 
-use std::convert::TryFrom;
 use std::fmt;
 
 use bit_field::BitField;
