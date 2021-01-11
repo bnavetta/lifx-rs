@@ -6,28 +6,17 @@ use std::fmt;
 use bit_field::BitField;
 use bytes::{Buf, BufMut};
 use macaddr::MacAddr6;
-use thiserror::Error;
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum MessageType {
-    GetService,
-    StateService,
-
-    GetLabel,
-    SetLabel,
-    StateLabel,
-
-    Other(u16),
-}
+use crate::{ProtocolError, message::MessageType};
 
 /// Header for LIFX messages.
 ///
 /// The LIFX documentation splits the header into three sections, the Frame, Frame Address, and Protocol Header. Since all three sections are required, and they
-/// reference each other, they are combined into one `MessageHeader` struct here.
+/// reference each other, they are combined into one `Header` struct here.
 ///
 /// See the [header description documentation](https://lan.developer.lifx.com/docs/header-description).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct MessageHeader {
+pub struct Header {
     /// Size of the entire message in bytes.
     pub size: u16,
     /// Source identifier. Clients can set this to a non-zero value, in which case devices will send responses to
@@ -59,19 +48,8 @@ pub enum DeviceTarget {
     Targeted(MacAddr6),
 }
 
-#[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum WireError {
-    #[error("Invalid protocol number: {0}")]
-    InvalidProtocol(u16),
-    #[error("Message not marked as addressable")]
-    NotAddressable,
-    #[error("Invalid origin indicator: {0}")]
-    InvalidOrigin(u8),
-    #[error("Not enough data in the buffer: {available} bytes available, but needed {needed}")]
-    InsufficientData { available: usize, needed: usize },
-}
 
-impl MessageHeader {
+impl Header {
     /// Size of a LIFX message header
     /// * 8 bytes for the Frame section
     /// * 16 bytes for the Frame Address section
@@ -82,14 +60,7 @@ impl MessageHeader {
     const PROTOCOL_NUMBER: u16 = 1024;
 
     /// Deserialize a message header from an input buffer.
-    pub fn parse<B: Buf>(buf: &mut B) -> Result<MessageHeader, WireError> {
-        if buf.remaining() < MessageHeader::HEADER_SIZE {
-            return Err(WireError::InsufficientData {
-                available: buf.remaining(),
-                needed: MessageHeader::HEADER_SIZE,
-            });
-        }
-
+    pub fn decode<B: Buf>(buf: &mut B) -> Result<Header, ProtocolError> {
         // Parse the Frame header
 
         let size = buf.get_u16_le();
@@ -97,16 +68,16 @@ impl MessageHeader {
         // The protocol, addressable, tagged, and origin fields are all effectively in one u16
         let proto_flags = buf.get_u16_le();
         let protocol = proto_flags & 0x0FFF; // Get the lower 12 bits
-        if protocol != MessageHeader::PROTOCOL_NUMBER {
-            return Err(WireError::InvalidProtocol(protocol));
+        if protocol != Header::PROTOCOL_NUMBER {
+            return Err(ProtocolError::InvalidProtocol(protocol));
         }
         let origin = proto_flags.get_bits(14..16);
         if origin != 0 {
-            return Err(WireError::InvalidOrigin(origin as u8));
+            return Err(ProtocolError::InvalidOrigin(origin as u8));
         }
         let addressable = proto_flags.get_bit(12);
         if !addressable {
-            return Err(WireError::NotAddressable);
+            return Err(ProtocolError::NotAddressable);
         }
         let tagged = proto_flags.get_bit(13);
 
@@ -132,10 +103,10 @@ impl MessageHeader {
 
         // Parse the Protocol Header
         buf.advance(8); // Skip 8 reserved bytes
-        let message_type = MessageType::try_from(buf.get_u16_le())?;
+        let message_type = MessageType::from(buf.get_u16_le());
         buf.advance(2); // Skip 2 reserved bytes
 
-        Ok(MessageHeader {
+        Ok(Header {
             size,
             source,
             target,
@@ -147,19 +118,12 @@ impl MessageHeader {
     }
 
     /// Serialize a message header to an output buffer.
-    pub fn write<B: BufMut>(&self, buf: &mut B) -> Result<(), WireError> {
-        if buf.remaining_mut() < MessageHeader::HEADER_SIZE {
-            return Err(WireError::InsufficientData {
-                available: buf.remaining_mut(),
-                needed: MessageHeader::HEADER_SIZE,
-            });
-        }
-
+    pub fn encode<B: BufMut>(&self, buf: &mut B) {
         // Write the Frame header
 
         buf.put_u16_le(self.size);
 
-        let mut proto_flags = MessageHeader::PROTOCOL_NUMBER;
+        let mut proto_flags = Header::PROTOCOL_NUMBER;
         proto_flags.set_bit(12, true); // Set the addressable bit
         proto_flags.set_bit(13, matches!(self.target, DeviceTarget::All)); // Set the tagged bit
                                                                            // Origin will already be 0
@@ -192,44 +156,14 @@ impl MessageHeader {
         buf.put_u64(0); // 8 bytes of padding
         buf.put_u16_le(self.message_type.into());
         buf.put_u16(0); // 2 bytes of padding
-
-        Ok(())
     }
 
     /// The expected size of the payload following this header, in bytes
     pub fn payload_size(&self) -> usize {
-        self.size as usize - MessageHeader::HEADER_SIZE
+        self.size as usize - Header::HEADER_SIZE
     }
 }
 
-impl TryFrom<u16> for MessageType {
-    type Error = WireError;
-
-    fn try_from(value: u16) -> Result<MessageType, WireError> {
-        let message_type = match value {
-            2 => MessageType::GetService,
-            3 => MessageType::StateService,
-            23 => MessageType::GetLabel,
-            24 => MessageType::SetLabel,
-            25 => MessageType::StateLabel,
-            _ => MessageType::Other(value),
-        };
-        Ok(message_type)
-    }
-}
-
-impl Into<u16> for MessageType {
-    fn into(self) -> u16 {
-        match self {
-            MessageType::GetService => 2,
-            MessageType::StateService => 3,
-            MessageType::GetLabel => 23,
-            MessageType::SetLabel => 24,
-            MessageType::StateLabel => 25,
-            MessageType::Other(value) => value,
-        }
-    }
-}
 
 impl fmt::Display for DeviceTarget {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

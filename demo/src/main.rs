@@ -5,8 +5,8 @@ use futures::stream::FuturesUnordered;
 use tokio::net::UdpSocket;
 use tokio::sync::broadcast;
 
-use lifx_client::{Client, Connection, DeviceAddress, AnyMessage};
-use lifx_proto::device;
+use lifx_client::{Client, Connection, DeviceAddress};
+use lifx_proto::Message;
 
 #[tokio::main]
 async fn main() {
@@ -27,9 +27,9 @@ async fn main() {
         let address = discovery.recv().await.unwrap();
         tracing::info!("Discovered {}", address);
 
-        let res = client.send_with_response(address, AnyMessage::GetLabel(device::GetLabel {})).await.unwrap();
+        let res = client.send_with_response(address, Message::GetLabel).await.unwrap();
         match res.message() {
-            AnyMessage::StateLabel(inner) => {
+            Message::StateLabel(inner) => {
                 tracing::info!("Label for {} is {}", address, inner.label)
             },
             other => tracing::error!("Unexpected response to GetLabel! {:?}", other)

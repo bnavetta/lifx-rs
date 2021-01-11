@@ -1,15 +1,13 @@
 use std::fmt;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
-use lifx_proto::wire::DeviceTarget;
+use lifx_proto::DeviceTarget;
 
-mod any_message;
 mod client;
 mod codec;
 mod connection;
 mod error;
 
-pub use any_message::AnyMessage;
 pub use client::Client;
 pub use connection::Connection;
 

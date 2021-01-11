@@ -1,16 +1,14 @@
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::HashMap;
 use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use futures::{ready, Sink, Stream};
-use lifx_proto::wire::MessageHeader;
-use lifx_proto::{device, PacketOptions};
+use futures::{Sink, Stream};
+use lifx_proto::{Packet, Message, Service};
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio_util::udp::UdpFramed;
 
-use crate::any_message::AnyMessage;
 use crate::codec::Codec;
 use crate::error::Error;
 use crate::DeviceAddress;
@@ -21,15 +19,14 @@ use crate::DeviceAddress;
 
 pub struct Request {
     address: DeviceAddress,
-    message: AnyMessage,
+    message: Message,
     response: Option<Response>,
 }
 
 #[derive(Debug)]
 pub struct InboundMessage {
     addr: SocketAddr,
-    header: MessageHeader,
-    message: AnyMessage,
+    packet: Packet,
 }
 /// Expected response for a message
 pub enum Response {
@@ -96,15 +93,15 @@ impl Connection {
 
     /// Dispatches a received message
     fn handle_message(&mut self, message: InboundMessage) {
-        if message.header.source != self.source {
+        if message.packet.source() != self.source {
             tracing::trace!(
                 "Skipping message for other source {}",
-                message.header.source
+                message.packet.source()
             );
             return;
         }
 
-        match self.pending_responses.remove(&message.header.sequence) {
+        match self.pending_responses.remove(&message.packet.sequence()) {
             Some(response) => match response {
                 Response::Reply(sender) => {
                     if let Err(m) = sender.send(message) {
@@ -114,13 +111,13 @@ impl Connection {
                 Response::Acknowledgement(_) => todo!("Handle acknowledgements"),
             },
             None => {
-                if let AnyMessage::StateService(service) = message.message {
+                if let Message::StateService(service) = message.packet.message() {
                     let address = DeviceAddress::new(
                         SocketAddr::new(message.addr.ip(), service.port as u16),
-                        message.header.target,
+                        message.packet.target(),
                     );
                     match service.service {
-                        device::Service::Udp => {
+                        Service::Udp => {
                             tracing::debug!("Discovered {}", address);
                             if let Err(_) = self.discovery.send(address) {
                                 // TODO: shutdown here?
@@ -180,16 +177,9 @@ impl Connection {
                         None => (false, false),
                     };
 
-                    let options = PacketOptions {
-                        source: self.source,
-                        target: request.address.target,
-                        sequence,
-                        response_required,
-                        acknowledgement_required,
-                    };
-
+                    let packet = Packet::new(self.source, request.address.target, sequence, response_required, acknowledgement_required, request.message);
                     Pin::new(&mut self.socket)
-                        .start_send(((options, request.message), request.address.service_address))
+                        .start_send((packet, request.address.service_address))
                         .map_err(Error::from)?;
                 }
                 None => {
@@ -244,18 +234,9 @@ impl Future for Connection {
     }
 }
 
-impl From<((MessageHeader, AnyMessage), SocketAddr)> for InboundMessage {
-    fn from(((header, message), addr): ((MessageHeader, AnyMessage), SocketAddr)) -> Self {
-        InboundMessage {
-            header,
-            message,
-            addr,
-        }
-    }
-}
 
 impl Request {
-    pub fn new(address: DeviceAddress, message: AnyMessage, response: Option<Response>) -> Request {
+    pub fn new(address: DeviceAddress, message: Message, response: Option<Response>) -> Request {
         Request {
             address,
             message,
@@ -265,11 +246,23 @@ impl Request {
 }
 
 impl InboundMessage {
-    pub fn message(&self) -> &AnyMessage {
-        &self.message
+    fn new(packet: Packet, addr: SocketAddr) -> InboundMessage {
+        InboundMessage {
+            packet, addr
+        }
     }
 
-    pub fn header(&self) -> &MessageHeader {
-        &self.header
+    pub fn message(&self) -> &Message {
+        &self.packet.message()
+    }
+
+    pub fn packet(&self) -> &Packet {
+        &self.packet
+    }
+}
+
+impl From<(Packet, SocketAddr)> for InboundMessage {
+    fn from((packet, addr): (Packet, SocketAddr)) -> InboundMessage {
+        InboundMessage::new(packet, addr)
     }
 }

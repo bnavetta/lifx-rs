@@ -1,9 +1,9 @@
-use lifx_proto::device;
+use lifx_proto::Message;
 use tokio::net::{UdpSocket, ToSocketAddrs};
 use tokio::sync::{mpsc, broadcast, oneshot};
 use tokio_util::udp::UdpFramed;
 
-use crate::{AnyMessage, DeviceAddress};
+use crate::DeviceAddress;
 use crate::codec::Codec;
 use crate::connection::{Connection, Request, Response, InboundMessage};
 use crate::error::Error;
@@ -49,18 +49,18 @@ impl Client {
         Ok((client, conn))
     }
 
-    pub fn send_async(&mut self, address: DeviceAddress, message: AnyMessage) -> Result<(), Error> {
+    pub fn send_async(&mut self, address: DeviceAddress, message: Message) -> Result<(), Error> {
         self.send(Request::new(address, message, None))
     }
 
-    pub async fn send_with_response(&mut self, address: DeviceAddress, message: AnyMessage) -> Result<InboundMessage, Error> {
+    pub async fn send_with_response(&mut self, address: DeviceAddress, message: Message) -> Result<InboundMessage, Error> {
         let (tx, rx) = oneshot::channel();
         self.send(Request::new(address, message, Some(Response::Reply(tx))))?;
         rx.await.map_err(|_| Error::ConnectionClosed)
     }
 
     pub fn send_discovery(&mut self) -> Result<broadcast::Receiver<DeviceAddress>, Error> {
-        self.send_async(DeviceAddress::all(), AnyMessage::GetService(device::GetService {}))?;
+        self.send_async(DeviceAddress::all(), Message::GetService)?;
         Ok(self.discovery_tx.subscribe())
     }
 

@@ -1,8 +1,7 @@
 use bytes::{Buf, BytesMut};
-use lifx_proto::{wire::MessageHeader, PacketOptions};
+use lifx_proto::{Packet, Header};
 use tokio_util::codec::{Decoder, Encoder};
 
-use crate::any_message::AnyMessage;
 use crate::error::Error;
 
 pub struct Codec;
@@ -10,30 +9,30 @@ pub struct Codec;
 /// Maximum allowed packet size. Packets larger than this will be rejected, to prevent potential denial-of-service attacks.
 const MAX_PACKET_SIZE: usize = 4 * 1024;
 
-impl Encoder<(PacketOptions, AnyMessage)> for Codec {
+impl Encoder<Packet> for Codec {
     type Error = Error;
 
     fn encode(
         &mut self,
-        (options, message): (PacketOptions, AnyMessage),
+        packet: Packet,
         dst: &mut BytesMut,
     ) -> Result<(), Self::Error> {
-        dst.reserve(message.packet_size());
-        message.encode(&options, dst)?;
+        dst.reserve(packet.len());
+        packet.encode(dst);
         Ok(())
     }
 }
 
 impl Decoder for Codec {
-    type Item = (MessageHeader, AnyMessage);
+    type Item = Packet;
 
     type Error = Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         // TODO: since we're dealing with UDP, should we reject if there's insufficient data instead of returning Ok(None)?
-        if src.len() < MessageHeader::HEADER_SIZE {
+        if src.len() < Header::HEADER_SIZE {
             // Not enough data to read the message header
-            src.reserve(MessageHeader::HEADER_SIZE);
+            src.reserve(Header::HEADER_SIZE);
             return Ok(None);
         }
 
@@ -56,10 +55,9 @@ impl Decoder for Codec {
         }
 
         let mut data = &src[..size];
-        let header = MessageHeader::parse(&mut data)?;
-        let message = AnyMessage::decode(&mut data, &header)?;
+        let packet = Packet::decode(&mut data)?;
         src.advance(size);
 
-        Ok(Some((header, message)))
+        Ok(Some(packet))
     }
 }

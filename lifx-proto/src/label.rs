@@ -5,7 +5,7 @@ use std::fmt;
 
 use bytes::{Buf, BufMut};
 
-use crate::{wire::WireError, LifxError};
+use crate::ProtocolError;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Label(String);
@@ -21,30 +21,14 @@ impl Label {
         Label::try_from(str.into()).unwrap()
     }
 
-    pub fn encode<B: BufMut>(&self, buf: &mut B) -> Result<(), LifxError> {
-        if buf.remaining_mut() < Label::MAX_LENGTH {
-            return Err(LifxError::Wire(WireError::InsufficientData {
-                available: buf.remaining_mut(),
-                needed: Label::MAX_LENGTH,
-            }));
-        }
-
+    pub fn encode<B: BufMut>(&self, buf: &mut B) {
         buf.put_slice(self.0.as_bytes());
         for _ in 0..(Label::MAX_LENGTH - self.0.len()) {
             buf.put_u8(0);
         }
-
-        Ok(())
     }
 
-    pub fn decode<B: Buf>(buf: &mut B) -> Result<Label, LifxError> {
-        if buf.remaining() < Label::MAX_LENGTH {
-            return Err(LifxError::Wire(WireError::InsufficientData {
-                available: buf.remaining(),
-                needed: Label::MAX_LENGTH,
-            }));
-        }
-
+    pub fn decode<B: Buf>(buf: &mut B) -> Result<Label, ProtocolError> {
         let mut str_bytes = Vec::with_capacity(Label::MAX_LENGTH);
 
         while str_bytes.len() < Label::MAX_LENGTH {
@@ -55,7 +39,7 @@ impl Label {
 
         match String::from_utf8(str_bytes) {
             Ok(str) => Ok(Label(str)),
-            Err(_) => Err(LifxError::InvalidLabel),
+            Err(_) => Err(ProtocolError::InvalidLabel),
         }
     }
 
@@ -69,13 +53,13 @@ impl Label {
 }
 
 impl TryFrom<String> for Label {
-    type Error = LifxError;
+    type Error = ProtocolError;
 
-    fn try_from(value: String) -> Result<Label, LifxError> {
+    fn try_from(value: String) -> Result<Label, ProtocolError> {
         if value.len() <= Label::MAX_LENGTH {
             Ok(Label(value))
         } else {
-            Err(LifxError::InvalidLabel)
+            Err(ProtocolError::InvalidLabel)
         }
     }
 }
