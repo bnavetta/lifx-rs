@@ -1,5 +1,9 @@
 use bytes::{Buf, BufMut};
-use lifx_proto::{self, Message, LifxError, PacketOptions, device, wire::{MessageHeader, MessageType}};
+use lifx_proto::{
+    self, device,
+    wire::{MessageHeader, MessageType},
+    LifxError, Message, PacketOptions,
+};
 
 /// Wrapper for [`Message`] types. This allows passing around a generic message, which is useful in certain cases (such as dispatching responses).
 /// In general, however, it's preferable to deal with a concrete, specific [`Message`] type.
@@ -14,13 +18,21 @@ pub enum AnyMessage {
 impl AnyMessage {
     pub fn decode<B: Buf>(buf: &mut B, header: &MessageHeader) -> Result<AnyMessage, LifxError> {
         match header.message_type {
-            MessageType::GetService => Ok(AnyMessage::GetService(lifx_proto::decode_packet(header, buf)?)),
-            MessageType::StateService => Ok(AnyMessage::StateService(lifx_proto::decode_packet(header, buf)?)),
-            MessageType::GetLabel => Ok(AnyMessage::GetLabel(lifx_proto::decode_packet(header, buf)?)),
-            MessageType::StateLabel => Ok(AnyMessage::StateLabel(lifx_proto::decode_packet(header, buf)?)),
+            MessageType::GetService => Ok(AnyMessage::GetService(lifx_proto::decode_packet(
+                header, buf,
+            )?)),
+            MessageType::StateService => Ok(AnyMessage::StateService(lifx_proto::decode_packet(
+                header, buf,
+            )?)),
+            MessageType::GetLabel => Ok(AnyMessage::GetLabel(lifx_proto::decode_packet(
+                header, buf,
+            )?)),
+            MessageType::StateLabel => Ok(AnyMessage::StateLabel(lifx_proto::decode_packet(
+                header, buf,
+            )?)),
             _ => Err(LifxError::UnexpectedMessage {
-                message_type: header.message_type
-            })
+                message_type: header.message_type,
+            }),
         }
     }
 

@@ -2,7 +2,7 @@
 
 use bytes::{Buf, BufMut};
 
-use crate::{Message, LifxError, wire, label::Label};
+use crate::{label::Label, wire, LifxError, Message};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct GetService {}
@@ -19,14 +19,14 @@ pub struct GetLabel {}
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct StateLabel {
-    pub label: Label
+    pub label: Label,
 }
 
 /// Service exposed by a LIFX device
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Service {
     Udp,
-    Unknown(u8)
+    Unknown(u8),
 }
 
 impl Message for GetService {
@@ -65,9 +65,7 @@ impl Message for GetLabel {
 
     const PAYLOAD_SIZE: usize = 0;
 
-    fn write_payload<B: BufMut>(&self, _buf: &mut B) {
-        
-    }
+    fn write_payload<B: BufMut>(&self, _buf: &mut B) {}
 
     fn from_wire<B: Buf>(_header: &wire::MessageHeader, _buf: &mut B) -> Result<Self, LifxError> {
         Ok(GetLabel {})
@@ -80,12 +78,14 @@ impl Message for StateLabel {
     const PAYLOAD_SIZE: usize = Label::MAX_LENGTH;
 
     fn write_payload<B: BufMut>(&self, buf: &mut B) {
-        self.label.encode(buf).expect("write_payload called with insufficient buffer");
+        self.label
+            .encode(buf)
+            .expect("write_payload called with insufficient buffer");
     }
 
     fn from_wire<B: Buf>(_header: &wire::MessageHeader, buf: &mut B) -> Result<Self, LifxError> {
         Ok(StateLabel {
-            label: Label::decode(buf)?
+            label: Label::decode(buf)?,
         })
     }
 }
@@ -103,7 +103,7 @@ impl From<u8> for Service {
     fn from(value: u8) -> Service {
         match value {
             1 => Service::Udp,
-            _ => Service::Unknown(value)
+            _ => Service::Unknown(value),
         }
     }
 }

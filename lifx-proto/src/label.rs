@@ -5,7 +5,7 @@ use std::fmt;
 
 use bytes::{Buf, BufMut};
 
-use crate::{LifxError, wire::WireError};
+use crate::{wire::WireError, LifxError};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Label(String);
@@ -25,8 +25,8 @@ impl Label {
         if buf.remaining_mut() < Label::MAX_LENGTH {
             return Err(LifxError::Wire(WireError::InsufficientData {
                 available: buf.remaining_mut(),
-                needed: Label::MAX_LENGTH
-            }))
+                needed: Label::MAX_LENGTH,
+            }));
         }
 
         buf.put_slice(self.0.as_bytes());
@@ -41,7 +41,7 @@ impl Label {
         if buf.remaining() < Label::MAX_LENGTH {
             return Err(LifxError::Wire(WireError::InsufficientData {
                 available: buf.remaining(),
-                needed: Label::MAX_LENGTH
+                needed: Label::MAX_LENGTH,
             }));
         }
 
@@ -55,7 +55,7 @@ impl Label {
 
         match String::from_utf8(str_bytes) {
             Ok(str) => Ok(Label(str)),
-            Err(_) => Err(LifxError::InvalidLabel)
+            Err(_) => Err(LifxError::InvalidLabel),
         }
     }
 

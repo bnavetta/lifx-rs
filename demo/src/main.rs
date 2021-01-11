@@ -1,10 +1,11 @@
 use std::net::SocketAddr;
 
 use bytes::{Buf, BytesMut};
+use futures::stream::FuturesUnordered;
 use tokio::net::UdpSocket;
 use tokio::sync::broadcast;
 
-use lifx_client::{DeviceAddress, transport::Transport};
+use lifx_client::{Client, Connection, DeviceAddress, AnyMessage};
 use lifx_proto::device;
 
 #[tokio::main]
@@ -14,23 +15,24 @@ async fn main() {
         .with_max_level(tracing::Level::TRACE)
         .init();
 
-    let socket = UdpSocket::bind("0.0.0.0:56700").await.unwrap();
-    socket.set_broadcast(true).unwrap();
+    let (mut client, conn) = Client::connect(1234).await.unwrap();
+    tokio::spawn(async {
+        if let Err(err) = conn.await {
+            tracing::error!("Connection died: {}", err);
+        }
+    });
 
-    let (discovery_tx, mut discovery) = broadcast::channel(20);
-    let mut transport = Transport::new(socket, 1234, discovery_tx);
-
-    tracing::info!("Sending GetState message...");
-    transport.send_discovery().await.unwrap();
-    tracing::info!("Hi");
-
+    let mut discovery = client.send_discovery().unwrap();
     loop {
-        transport.process_messages().unwrap();
+        let address = discovery.recv().await.unwrap();
+        tracing::info!("Discovered {}", address);
 
-        if let Ok(addr) = discovery.try_recv() {
-            tracing::info!("Discovered {}", addr);
+        let res = client.send_with_response(address, AnyMessage::GetLabel(device::GetLabel {})).await.unwrap();
+        match res.message() {
+            AnyMessage::StateLabel(inner) => {
+                tracing::info!("Label for {} is {}", address, inner.label)
+            },
+            other => tracing::error!("Unexpected response to GetLabel! {:?}", other)
         }
     }
-
-    // TODO: get labels
 }

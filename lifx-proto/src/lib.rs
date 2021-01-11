@@ -16,18 +16,15 @@ pub enum LifxError {
     Payload(#[from] PayloadError),
 
     #[error("unexpected message: {message_type:?}")]
-    UnexpectedMessage {
-        message_type: wire::MessageType
-    },
+    UnexpectedMessage { message_type: wire::MessageType },
 
     #[error("invalid label")]
-    InvalidLabel
+    InvalidLabel,
 }
 
 /// Errors related to a message payload
 #[derive(Debug, Error)]
-pub enum PayloadError {
-}
+pub enum PayloadError {}
 
 /// A LIFX protocol message
 pub trait Message: Sized {
@@ -62,7 +59,11 @@ pub struct PacketOptions {
 /// * `options` - packet options such as the target device
 /// * `message` - the message to encode
 /// * `buf` - buffer to write into
-pub fn encode_packet<M: Message, B: BufMut>(options: &PacketOptions, message: &M, buf: &mut B) -> Result<(), LifxError> {
+pub fn encode_packet<M: Message, B: BufMut>(
+    options: &PacketOptions,
+    message: &M,
+    buf: &mut B,
+) -> Result<(), LifxError> {
     let size = wire::MessageHeader::HEADER_SIZE + M::PAYLOAD_SIZE;
 
     write_header(buf, size, M::TYPE, options)?;
@@ -73,15 +74,19 @@ pub fn encode_packet<M: Message, B: BufMut>(options: &PacketOptions, message: &M
 
 /// Generates and writes the packet header for a message.
 /// This reduces the amount of specialized code generated for [`encode_packet`] calls.
-fn write_header<B: BufMut>(buf: &mut B, size: usize, message_type: wire::MessageType, options: &PacketOptions) -> Result<(), LifxError> {
+fn write_header<B: BufMut>(
+    buf: &mut B,
+    size: usize,
+    message_type: wire::MessageType,
+    options: &PacketOptions,
+) -> Result<(), LifxError> {
     debug_assert!(size < std::u16::MAX as usize, "Packet too large!");
     if size > buf.remaining_mut() {
         return Err(LifxError::Wire(wire::WireError::InsufficientData {
             available: buf.remaining_mut(),
-            needed: size
+            needed: size,
         }));
     }
-
 
     let header = wire::MessageHeader {
         size: size as u16,
@@ -90,7 +95,7 @@ fn write_header<B: BufMut>(buf: &mut B, size: usize, message_type: wire::Message
         response_required: options.response_required,
         acknowledgement_required: options.acknowledgement_required,
         sequence: options.sequence,
-        message_type: message_type
+        message_type: message_type,
     };
 
     header.write(buf)?;
@@ -102,14 +107,22 @@ fn write_header<B: BufMut>(buf: &mut B, size: usize, message_type: wire::Message
 /// # Arguments
 /// * `header` - the message header
 /// * `buf` - buffer to read the message payload from
-pub fn decode_packet<M: Message, B: Buf>(header: &wire::MessageHeader, buf: &mut B) -> Result<M, LifxError> {
+pub fn decode_packet<M: Message, B: Buf>(
+    header: &wire::MessageHeader,
+    buf: &mut B,
+) -> Result<M, LifxError> {
     verify_header(buf, header, M::TYPE, M::PAYLOAD_SIZE)?;
     M::from_wire(header, buf)
 }
 
 /// Verifies that a message header matches the expected type and size
 /// This reduces the amout of specialized code generated for [`decode_packet`] calls
-fn verify_header<B: Buf>(buf: &B, header: &wire::MessageHeader, expected_type: wire::MessageType, expected_size: usize) -> Result<(), LifxError> {
+fn verify_header<B: Buf>(
+    buf: &B,
+    header: &wire::MessageHeader,
+    expected_type: wire::MessageType,
+    expected_size: usize,
+) -> Result<(), LifxError> {
     if header.message_type != expected_type {
         Err(LifxError::UnexpectedMessage {
             message_type: header.message_type,
@@ -117,7 +130,7 @@ fn verify_header<B: Buf>(buf: &B, header: &wire::MessageHeader, expected_type: w
     } else if buf.remaining() < expected_size {
         Err(LifxError::Wire(wire::WireError::InsufficientData {
             available: buf.remaining(),
-            needed: expected_size
+            needed: expected_size,
         }))
     } else {
         Ok(())

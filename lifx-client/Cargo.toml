@@ -8,7 +8,10 @@ edition = "2018"
 
 [dependencies]
 bytes = "1.0"
+futures = "0.3"
 lifx-proto = { path = "../lifx-proto" }
 tokio = { version = "1.0", features = ["net", "sync"] }
+tokio-util = { version = "0.6", features = ["net", "codec"] }
+tokio-stream = "0.1"
 thiserror = "1.0"
 tracing = "0.1"

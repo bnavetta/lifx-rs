@@ -162,7 +162,7 @@ impl MessageHeader {
         let mut proto_flags = MessageHeader::PROTOCOL_NUMBER;
         proto_flags.set_bit(12, true); // Set the addressable bit
         proto_flags.set_bit(13, matches!(self.target, DeviceTarget::All)); // Set the tagged bit
-                                                                             // Origin will already be 0
+                                                                           // Origin will already be 0
         buf.put_u16_le(proto_flags);
 
         buf.put_u32_le(self.source);
@@ -235,7 +235,7 @@ impl fmt::Display for DeviceTarget {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             DeviceTarget::All => f.write_str("all"),
-            DeviceTarget::Targeted(addr) => addr.fmt(f)
+            DeviceTarget::Targeted(addr) => addr.fmt(f),
         }
     }
 }
