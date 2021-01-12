@@ -105,10 +105,21 @@ impl Connection {
             Some(response) => match response {
                 Response::Reply(sender) => {
                     if let Err(m) = sender.send(message) {
-                        tracing::warn!("Dangling response {:?}", m)
+                        tracing::warn!("Dangling response {:?}", m);
                     }
                 }
-                Response::Acknowledgement(_) => todo!("Handle acknowledgements"),
+                Response::Acknowledgement(sender) => {
+                    match message.message() {
+                        Message::Acknowledgement => (),
+                        other => {
+                            tracing::warn!("Received unexpected {:?} message, treating as acknowledgement", other);
+                        }
+                    }
+
+                    if let Err(_) = sender.send(()) {
+                        tracing::warn!("Dangling acknowledgement for {}", message.packet.sequence());
+                    }
+                },
             },
             None => {
                 if let Message::StateService(service) = message.packet.message() {
@@ -258,6 +269,10 @@ impl InboundMessage {
 
     pub fn packet(&self) -> &Packet {
         &self.packet
+    }
+
+    pub fn into_message(self) -> Message {
+        self.packet.into_message()
     }
 }
 

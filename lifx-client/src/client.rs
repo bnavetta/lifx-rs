@@ -1,4 +1,6 @@
-use lifx_proto::Message;
+use std::time::Duration;
+
+use lifx_proto::{Message, ProtocolError, message::*, color::Hsbk};
 use tokio::net::{UdpSocket, ToSocketAddrs};
 use tokio::sync::{mpsc, broadcast, oneshot};
 use tokio_util::udp::UdpFramed;
@@ -49,6 +51,37 @@ impl Client {
         Ok((client, conn))
     }
 
+    // Higher-level operations
+
+    pub fn send_discovery(&mut self) -> Result<broadcast::Receiver<DeviceAddress>, Error> {
+        self.send_async(DeviceAddress::all(), Message::GetService)?;
+        Ok(self.discovery_tx.subscribe())
+    }
+    
+    pub async fn get_label(&mut self, address: DeviceAddress) -> Result<String, Error> {
+        let message = self.send_with_response(address, Message::GetLabel).await?;
+        match message.into_message() {
+            Message::StateLabel(inner) => Ok(inner.label.into_string()),
+            other => Err(Error::Protocol(ProtocolError::UnexpectedMessage(other.message_type())))
+        }
+    }
+
+    pub async fn get_light_state(&mut self, address: DeviceAddress) -> Result<State, Error> {
+        let message = self.send_with_response(address, Message::Get).await?;
+        match message.into_message() {
+            Message::State(inner) => Ok(inner),
+            other => Err(Error::Protocol(ProtocolError::UnexpectedMessage(other.message_type())))
+        }
+    }
+
+    pub async fn set_light_color(&mut self, address: DeviceAddress, color: Hsbk, transition_duration: Duration) -> Result<(), Error> {
+        let message = Message::SetColor(SetColor { color, duration: transition_duration });
+        // TODO: flag for sending async or not
+        self.send_with_acknowledgement(address, message).await
+    }
+
+    // Lower-level functions to send/receive messages directly
+
     pub fn send_async(&mut self, address: DeviceAddress, message: Message) -> Result<(), Error> {
         self.send(Request::new(address, message, None))
     }
@@ -59,9 +92,10 @@ impl Client {
         rx.await.map_err(|_| Error::ConnectionClosed)
     }
 
-    pub fn send_discovery(&mut self) -> Result<broadcast::Receiver<DeviceAddress>, Error> {
-        self.send_async(DeviceAddress::all(), Message::GetService)?;
-        Ok(self.discovery_tx.subscribe())
+    pub async fn send_with_acknowledgement(&mut self, address: DeviceAddress, message: Message) -> Result<(), Error> {
+        let (tx, rx) = oneshot::channel();
+        self.send(Request::new(address, message, Some(Response::Acknowledgement(tx))))?;
+        rx.await.map_err(|_| Error::ConnectionClosed)
     }
 
     fn send(&mut self, request: Request) -> Result<(), Error> {

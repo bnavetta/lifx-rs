@@ -5,8 +5,9 @@ use std::convert::TryInto;
 use bytes::{Buf, BufMut};
 use thiserror::Error;
 
+pub mod color;
 pub mod label;
-mod message;
+pub mod message;
 pub mod header;
 
 pub use message::{Message, MessageType, Service};
@@ -28,6 +29,9 @@ pub enum ProtocolError {
 
     #[error("invalid label")]
     InvalidLabel,
+
+    #[error("invalid payload: {0}")]
+    InvalidPayload(String),
 }
 
 #[derive(Debug, Clone)]
@@ -98,5 +102,9 @@ impl Packet {
 
     pub fn message(&self) -> &Message {
         &self.message
+    }
+
+    pub fn into_message(self) -> Message {
+        self.message
     }
 }

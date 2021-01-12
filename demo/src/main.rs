@@ -1,5 +1,8 @@
+use std::time::Duration;
+
 use lifx_client::Client;
-use lifx_proto::Message;
+use lifx_proto::color::{Hsbk, Kelvin};
+use palette::Srgb;
 
 #[tokio::main]
 async fn main() {
@@ -19,13 +22,14 @@ async fn main() {
     loop {
         let address = discovery.recv().await.unwrap();
         tracing::info!("Discovered {}", address);
+        let state = client.get_light_state(address).await.unwrap();
+        tracing::info!("State of {}: {:?}", address, state);
+        let old_color: Srgb = state.color.color().into();
+        tracing::info!("Original color: {:?}", old_color);
 
-        let res = client.send_with_response(address, Message::GetLabel).await.unwrap();
-        match res.message() {
-            Message::StateLabel(inner) => {
-                tracing::info!("Label for {} is {}", address, inner.label)
-            },
-            other => tracing::error!("Unexpected response to GetLabel! {:?}", other)
-        }
+        let new_color = Hsbk::new(Srgb::new(0u8, 255, 255).into_format().into(), Kelvin::new(2700));
+        client.set_light_color(address, new_color, Duration::from_secs(5)).await.unwrap();
+        tracing::info!("Set color!");
+        break;
     }
 }

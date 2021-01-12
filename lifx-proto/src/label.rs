@@ -38,7 +38,7 @@ impl Label {
         }
 
         match String::from_utf8(str_bytes) {
-            Ok(str) => Ok(Label(str)),
+            Ok(str) => Ok(Label(str.trim_end_matches(char::from(0)).into())),
             Err(_) => Err(ProtocolError::InvalidLabel),
         }
     }
